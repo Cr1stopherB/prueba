@@ -7,7 +7,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
   CONTAINER_NAME: spring-app-ejemplo
 
 jobs:
@@ -20,6 +19,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Convertir el nombre del repositorio a minúsculas
+      - name: Lowercase repository name
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
       # 1. Configurar JDK 21 y la caché automática para Gradle
       - name: Set up JDK 21
@@ -59,7 +63,7 @@ jobs:
           username: ec2-user                 # Usuario Amazon Linux
           key: ${{ secrets.EC2_SSH_KEY }}     # Tu llave .pem
           port: 22
-          envs: TARGET_HOST_IP
+          envs: TARGET_HOST_IP,REGISTRY,IMAGE_NAME,CONTAINER_NAME
           script: |
             # --- APROVISIONAMIENTO IDEMPOTENTE DE SWAP ---
             if [ ! -f /swapfile ]; then
@@ -84,19 +88,19 @@ jobs:
             # --- EJECUCIÓN SEGURA CON PERMISOS REFRESCADOS ---
             sg docker -c "
               # Autenticar el Docker local del EC2 en GHCR
-              echo '${{ secrets.GH_CR_PAT }}' | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+              echo '${{ secrets.GH_CR_PAT }}' | docker login $REGISTRY -u ${{ github.actor }} --password-stdin
             
               # Descargar la última versión de la imagen
-              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+              docker pull $REGISTRY/$IMAGE_NAME:latest
             
               # --- PASOS IDEMPOTENTES DEL CONTENEDOR ---
-              docker stop ${{ env.CONTAINER_NAME }} || true
-              docker rm ${{ env.CONTAINER_NAME }} || true
+              docker stop $CONTAINER_NAME || true
+              docker rm $CONTAINER_NAME || true
               docker image prune -f
             
               # --- MAPEO CRUZADO: Puerto 80 del Servidor al 8080 del Contenedor ---
               docker run -d \
-                --name ${{ env.CONTAINER_NAME }} \
+                --name $CONTAINER_NAME \
                 -p 80:8080 \
                 -e PORT=8080 \
                 -e PUBLIC_HOST_URL='http://$TARGET_HOST_IP' \
@@ -106,10 +110,13 @@ jobs:
                 -e DB_PASSWORD='${{ secrets.SUPABASE_DB_PASSWORD }}' \
                 -e AWS_REGION='us-east-2' \
                 --restart unless-stopped \
-                ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+                $REGISTRY/$IMAGE_NAME:latest
             "
         env:
           TARGET_HOST_IP: ${{ vars.TARGET_HOST_IP }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
           API_GATEWAY_SECRET: ${{ secrets.API_GATEWAY_SECRET }}
           GH_CR_PAT: ${{ secrets.GH_CR_PAT }}
           SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
