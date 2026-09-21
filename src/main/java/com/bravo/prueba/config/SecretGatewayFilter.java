@@ -20,7 +20,7 @@ public class SecretGatewayFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
-        String secretHeader = request.getHeader("X.Secret-Gateway");
+        String secretHeader = request.getHeader("X-Secret-Gateway");
         String path = request.getRequestURI();
 
         // LOG DE DEPURACIÓN TEMPORAL
